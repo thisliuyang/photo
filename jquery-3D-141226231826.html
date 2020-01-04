@@ -1,0 +1,759 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<!-- saved from url=(0048)http://www.jq22.com/demo/jquery-3D-141226231826/ -->
+<html xmlns="http://www.w3.org/1999/xhtml"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<title>漂亮的3D相片展示效果 </title>
+<meta http-equiv="imagetoolbar" content="no">
+<style type="text/css">
+
+	html {
+
+		overflow: hidden;
+
+	}
+
+	body {
+
+		position: absolute;
+
+		margin: 0px;
+
+		padding: 0px;
+
+		background: #eee;
+
+		width: 100%;
+
+		height: 100%;
+
+		color: #fff;
+
+		font-family: arial;
+
+		font-size: 0.8em;
+
+	}
+
+	#screen {
+
+		position: absolute;
+
+		width: 100%;
+
+		height: 100%;
+
+		background: #000;
+
+		overflow: hidden;
+
+	}
+
+	#screen img, canvas { 
+
+		position: absolute;
+
+		left: -9999px;
+
+		cursor: pointer;
+
+        image-rendering: optimizeSpeed;
+
+
+
+	}
+
+	#screen .href {
+
+		border: #FFF dotted 1px;
+
+	}
+
+	#screen .fog { 
+
+		position: absolute;
+
+		background: #fff;
+
+		opacity: 0.1;
+
+		filter: alpha(opacity=10);
+
+	}
+
+	#command {
+
+		position:absolute;
+
+		left: 1em;
+
+		top: 1em;
+
+		width: 130px;
+
+		z-index: 30000;
+
+		background:#000;
+
+		border: #000 solid 1em;
+
+	}
+
+	#bar {
+
+		position:relative;
+
+		left: 1em;
+
+		top: 1em;
+
+		height: 160px;
+
+	}
+
+	#bar .button { 
+
+		position: absolute;
+
+		background: #222;
+
+		width: 20px;
+
+		height: 20px;
+
+		cursor: pointer;
+
+	}
+
+	#bar .loaded { 
+
+		background: #666;
+
+	}
+
+	#bar .viewed { 
+
+		background: #fff;
+
+	}
+
+	#bar .selected { 
+
+		background: #f00;
+
+	}
+
+	#urlInfo {
+
+		position: absolute;
+
+		background: url(images/r.gif) no-repeat 0 4px;
+
+		visibility: hidden;
+
+		z-index: 30000;
+
+		padding-left: 12px;
+
+		cursor: pointer;
+
+	}
+
+</style>
+<script type="text/javascript">
+
+// =============================================================
+
+//           ===== 3D gallery experiment =====
+
+// script written by Gerard Ferrandez - April 5, 2010
+
+// http://www.dhteumeuleu.com
+
+// use under a CC-BY-NC license
+
+// -------------------------------------------------------------
+
+// update: April 17 : added hyperlinks, tweaked z-index
+
+// =============================================================
+
+
+
+var m3D = function () {
+
+	/* ---- private vars ---- */
+
+	var diapo = [],
+
+		imb,
+
+		scr,
+
+		bar,
+
+		selected,
+
+		urlInfo,
+
+		imagesPath = "images/",
+
+		camera = {x:0, y:0, z:-650, s:0, fov: 500},
+
+		nw = 0,
+
+		nh = 0;
+
+	/* ==== camera tween methods ==== */
+
+	camera.setTarget = function (c0, t1, p) {
+
+		if (Math.abs(t1 - c0) > .1) {
+
+			camera.s = 1;
+
+			camera.p = 0;
+
+			camera.d = t1 - c0;
+
+			if (p) {
+
+				camera.d *= 2;
+
+				camera.p = 9;
+
+			}
+
+		}
+
+	}
+
+	camera.tween = function (v) {
+
+		if (camera.s != 0) {
+
+			camera.p += camera.s;
+
+			camera[v] += camera.d * camera.p * .01;
+
+			if (camera.p == 10) camera.s = -1;
+
+			else if (camera.p == 0) camera.s = 0;
+
+		}
+
+		return camera.s;
+
+	}
+
+	/* ==== diapo constructor ==== */
+
+	var Diapo = function (n, img, x, y, z) {
+
+		if (img) {
+
+			this.url = img.url;
+
+			this.title = img.title;
+
+			this.color = img.color;
+
+			this.isLoaded = false;
+
+			if (document.createElement("canvas").getContext) {
+
+				/* ---- using canvas in place of images (performance trick) ---- */
+
+				this.srcImg = new Image();
+
+				this.srcImg.src = imagesPath + img.src;
+
+				this.img = document.createElement("canvas");
+
+				this.canvas = true;
+
+				scr.appendChild(this.img);
+
+			} else {
+
+				/* ---- normal image ---- */
+
+				this.img = document.createElement('img');
+
+				this.img.src = imagesPath + img.src;
+
+				scr.appendChild(this.img);
+
+			}
+
+			/* ---- on click event ---- */
+
+			this.img.onclick = function () {
+
+				if (camera.s) return;
+
+				if (this.diapo.isLoaded) {
+
+					if (this.diapo.urlActive) {
+
+						/* ---- jump hyperlink ---- */
+
+						top.location.href = this.diapo.url;
+
+					} else {
+
+						/* ---- target positions ---- */
+
+						camera.tz = this.diapo.z - camera.fov;
+
+						camera.tx = this.diapo.x;
+
+						camera.ty = this.diapo.y;
+
+						/* ---- disable previously selected img ---- */
+
+						if (selected) {
+
+							selected.but.className = "button viewed";
+
+							selected.img.className = "";
+
+							selected.img.style.cursor = "pointer";
+
+							selected.urlActive = false;
+
+							urlInfo.style.visibility = "hidden";
+
+						}
+
+						/* ---- select current img ---- */
+
+						this.diapo.but.className = "button selected";
+
+						interpolation(false);
+
+						selected = this.diapo;
+
+					}
+
+				}
+
+			}
+
+			/* ---- command bar buttons ---- */
+
+			this.but = document.createElement('div');
+
+			this.but.className = "button";
+
+			bar.appendChild(this.but);
+
+			this.but.diapo = this;
+
+			this.but.style.left = Math.round((this.but.offsetWidth  * 1.2) * (n % 4)) + 'px';
+
+			this.but.style.top  = Math.round((this.but.offsetHeight * 1.2) * Math.floor(n / 4)) + 'px';
+
+			this.but.onclick = this.img.onclick;
+
+			imb = this.img;
+
+			this.img.diapo = this;
+
+			this.zi = 25000;
+
+		} else {
+
+			/* ---- transparent div ---- */
+
+			this.img = document.createElement('div');
+
+			this.isLoaded = true;
+
+			this.img.className = "fog";
+
+			scr.appendChild(this.img);
+
+			this.w = 300;
+
+			this.h = 300;
+
+			this.zi = 15000;
+
+		}
+
+		/* ---- object variables ---- */
+
+		this.x = x;
+
+		this.y = y;
+
+		this.z = z;
+
+		this.css = this.img.style;
+
+	}
+
+	/* ==== main 3D animation ==== */
+
+	Diapo.prototype.anim = function () {
+
+		if (this.isLoaded) {
+
+			/* ---- 3D to 2D projection ---- */
+
+			var x = this.x - camera.x;
+
+			var y = this.y - camera.y;
+
+			var z = this.z - camera.z;
+
+			if (z < 20) z += 5000;
+
+			var p = camera.fov / z;
+
+			var w = this.w * p;
+
+			var h = this.h * p;
+
+			/* ---- HTML rendering ---- */
+
+			this.css.left   = Math.round(nw + x * p - w * .5) + 'px';
+
+			this.css.top    = Math.round(nh + y * p - h * .5) + 'px';  
+
+			this.css.width  = Math.round(w) + 'px';
+
+			this.css.height = Math.round(h) + 'px';
+
+			this.css.zIndex = this.zi - Math.round(z);
+
+		} else {
+
+			/* ---- image is loaded? ---- */
+
+			this.isLoaded = this.loading();
+
+		}
+
+	}
+
+	/* ==== onload initialization ==== */
+
+	Diapo.prototype.loading = function () {
+
+		if ((this.canvas && this.srcImg.complete) || this.img.complete) {
+
+			if (this.canvas) {
+
+				/* ---- canvas version ---- */
+
+				this.w = this.srcImg.width;
+
+				this.h = this.srcImg.height;
+
+				this.img.width = this.w;
+
+				this.img.height = this.h;
+
+				var context = this.img.getContext("2d");
+
+				context.drawImage(this.srcImg, 0, 0, this.w, this.h);
+
+			} else {
+
+				/* ---- plain image version ---- */
+
+				this.w = this.img.width;
+
+				this.h = this.img.height;
+
+			}
+
+			/* ---- button loaded ---- */
+
+			this.but.className += " loaded";
+
+			return true;
+
+		}
+
+		return false;
+
+	}
+
+	////////////////////////////////////////////////////////////////////////////
+
+	/* ==== screen dimensions ==== */
+
+	var resize = function () {
+
+		nw = scr.offsetWidth * .5;
+
+		nh = scr.offsetHeight * .5;
+
+	}
+
+	/* ==== disable interpolation during animation ==== */
+
+	var interpolation = function (bicubic) {
+
+		var i = 0, o;
+
+		while( o = diapo[i++] ) {
+
+			if (o.but) {
+
+				o.css.msInterpolationMode = bicubic ? 'bicubic' : 'nearest-neighbor'; // makes IE8 happy
+
+				o.css.imageRendering = bicubic ? 'optimizeQuality' : 'optimizeSpeed'; // does not really work...
+
+			}
+
+		}
+
+	}
+
+	/* ==== init script ==== */
+
+	var init = function (data) {
+
+		/* ---- containers ---- */
+
+		scr = document.getElementById("screen");
+
+		bar = document.getElementById("bar");
+
+		urlInfo = document.getElementById("urlInfo");
+
+		resize();
+
+		/* ---- loading images ---- */
+
+		var i = 0, 
+
+		    o,
+
+			n = data.length;
+
+		while( o = data[i++] ) {
+
+			/* ---- images ---- */
+
+			var x = 1000 * ((i % 4) - 1.5);
+
+			var y = Math.round(Math.random() * 4000) - 2000;
+
+			var z = i * (5000 / n);
+
+			diapo.push( new Diapo(i - 1, o, x, y, z));
+
+			/* ---- transparent frames ---- */
+
+			var k = diapo.length - 1;
+
+			for (var j = 0; j < 3; j++) {
+
+				var x = Math.round(Math.random() * 4000) - 2000;
+
+				var y = Math.round(Math.random() * 4000) - 2000;
+
+				diapo.push( new Diapo(k, null, x, y, z + 100));
+
+			}
+
+		}
+
+		/* ---- start engine ---- */
+
+		run();
+
+	}
+
+	////////////////////////////////////////////////////////////////////////////
+
+	/* ==== main loop ==== */
+
+	var run = function () {
+
+		/* ---- x axis move ---- */
+
+		if (camera.tx) {
+
+			if (!camera.s) camera.setTarget(camera.x, camera.tx);
+
+			var m = camera.tween('x');
+
+			if (!m) camera.tx = 0;
+
+		/* ---- y axis move ---- */
+
+		} else if (camera.ty) {
+
+			if (!camera.s) camera.setTarget(camera.y, camera.ty); 
+
+			var m = camera.tween('y');
+
+			if (!m) camera.ty = 0;
+
+		/* ---- z axis move ---- */
+
+		} else if (camera.tz) {
+
+			if (!camera.s) camera.setTarget(camera.z, camera.tz);
+
+			var m = camera.tween('z');
+
+			if (!m) {
+
+				/* ---- animation end ---- */
+
+				camera.tz = 0;
+
+				interpolation(true);
+
+				/* ---- activate hyperlink ---- */
+
+				if (selected.url) {
+
+					selected.img.style.cursor = "pointer";
+
+					selected.urlActive = true;
+
+					selected.img.className = "href";
+
+					urlInfo.diapo = selected;
+
+					urlInfo.onclick = selected.img.onclick;
+
+					urlInfo.innerHTML = selected.title || selected.url;
+
+					urlInfo.style.visibility = "visible";
+
+					urlInfo.style.color = selected.color || "#fff";
+
+					urlInfo.style.top = Math.round(selected.img.offsetTop + selected.img.offsetHeight - urlInfo.offsetHeight - 5) + "px";
+
+					urlInfo.style.left = Math.round(selected.img.offsetLeft + selected.img.offsetWidth - urlInfo.offsetWidth - 5) + "px";
+
+				} else {
+
+					selected.img.style.cursor = "default";
+
+				}
+
+			}
+
+		}
+
+		/* ---- anim images ---- */
+
+		var i = 0, o;
+
+		while( o = diapo[i++] ) o.anim();
+
+		/* ---- loop ---- */
+
+		setTimeout(run, 32);
+
+	}
+
+	return {
+
+		////////////////////////////////////////////////////////////////////////////
+
+		/* ==== initialize script ==== */
+
+		init : init
+
+	}
+
+}();
+
+
+
+</script>
+</head>
+<body>
+<div id="screen">
+<div id="command">
+<h1>明月，点这里</h1>
+<div id="bar"><div class="button loaded" style="left: 0px; top: 0px;"></div><div class="button loaded" style="left: 24px; top: 0px;"></div><div class="button loaded" style="left: 48px; top: 0px;"></div><div class="button loaded" style="left: 72px; top: 0px;"></div><div class="button loaded" style="left: 0px; top: 24px;"></div><div class="button loaded" style="left: 24px; top: 24px;"></div><div class="button loaded" style="left: 48px; top: 24px;"></div><div class="button loaded" style="left: 72px; top: 24px;"></div><div class="button loaded" style="left: 0px; top: 48px;"></div><div class="button selected" style="left: 24px; top: 48px;"></div><div class="button loaded" style="left: 48px; top: 48px;"></div><div class="button loaded" style="left: 72px; top: 48px;"></div><div class="button loaded" style="left: 0px; top: 72px;"></div><div class="button loaded" style="left: 24px; top: 72px;"></div><div class="button loaded" style="left: 48px; top: 72px;"></div><div class="button loaded" style="left: 72px; top: 72px;"></div><div class="button viewed" style="left: 0px; top: 96px;"></div><div class="button loaded" style="left: 24px; top: 96px;"></div><div class="button loaded" style="left: 48px; top: 96px;"></div><div class="button loaded" style="left: 72px; top: 96px;"></div><div class="button loaded" style="left: 0px; top: 120px;"></div><div class="button loaded" style="left: 24px; top: 120px;"></div><div class="button loaded" style="left: 48px; top: 120px;"></div><div class="button viewed" style="left: 72px; top: 120px;"></div></div>
+</div>
+<div id="urlInfo" style="visibility: hidden; color: rgb(255, 255, 255); top: 588px; left: 778px;">http://www.jq22.com</div>
+<canvas width="333" height="500" style="left: 559px; top: 262px; width: 46px; height: 69px; z-index: 21375;"></canvas><div class="fog" style="left: 639px; top: 517px; width: 40px; height: 40px; z-index: 11275;"></div><div class="fog" style="left: 432px; top: 284px; width: 40px; height: 40px; z-index: 11275;"></div><div class="fog" style="left: 523px; top: 342px; width: 40px; height: 40px; z-index: 11275;"></div><canvas width="357" height="500" style="left: 697px; top: 99px; width: 47px; height: 65px; z-index: 21167;"></canvas><div class="fog" style="left: 777px; top: 60px; width: 38px; height: 38px; z-index: 11067;"></div><div class="fog" style="left: 532px; top: 487px; width: 38px; height: 38px; z-index: 11067;"></div><div class="fog" style="left: 852px; top: 288px; width: 38px; height: 38px; z-index: 11067;"></div><canvas width="500" height="375" style="left: 813px; top: 127px; width: 62px; height: 46px; z-index: 20958;"></canvas><div class="fog" style="left: 507px; top: 406px; width: 36px; height: 36px; z-index: 10858;"></div><div class="fog" style="left: 654px; top: 195px; width: 36px; height: 36px; z-index: 10858;"></div><div class="fog" style="left: 796px; top: 353px; width: 36px; height: 36px; z-index: 10858;"></div><canvas width="500" height="333" style="left: 455px; top: 421px; width: 59px; height: 39px; z-index: 20750;"></canvas><div class="fog" style="left: 626px; top: 96px; width: 34px; height: 34px; z-index: 10650;"></div><div class="fog" style="left: 554px; top: 492px; width: 34px; height: 34px; z-index: 10650;"></div><div class="fog" style="left: 530px; top: 508px; width: 34px; height: 34px; z-index: 10650;"></div><canvas width="400" height="500" style="left: 585px; top: 397px; width: 45px; height: 56px; z-index: 20542;"></canvas><div class="fog" style="left: 561px; top: 413px; width: 33px; height: 33px; z-index: 10442;"></div><div class="fog" style="left: 590px; top: 392px; width: 33px; height: 33px; z-index: 10442;"></div><div class="fog" style="left: 435px; top: 441px; width: 33px; height: 33px; z-index: 10442;"></div><canvas width="500" height="333" style="left: 693px; top: 434px; width: 54px; height: 36px; z-index: 20333;"></canvas><div class="fog" style="left: 782px; top: 477px; width: 31px; height: 31px; z-index: 10233;"></div><div class="fog" style="left: 857px; top: 513px; width: 31px; height: 31px; z-index: 10233;"></div><div class="fog" style="left: 801px; top: 223px; width: 31px; height: 31px; z-index: 10233;"></div><canvas width="500" height="345" style="left: 797px; top: 352px; width: 51px; height: 35px; z-index: 20125;"></canvas><div class="fog" style="left: 456px; top: 347px; width: 30px; height: 30px; z-index: 10025;"></div><div class="fog" style="left: 473px; top: 339px; width: 30px; height: 30px; z-index: 10025;"></div><div class="fog" style="left: 544px; top: 176px; width: 30px; height: 30px; z-index: 10025;"></div><canvas width="500" height="333" style="left: -12780px; top: -763px; width: 3000px; height: 1998px; z-index: 24917;"></canvas><div class="fog" style="left: 3335px; top: 2560px; width: 818px; height: 818px; z-index: 14817;"></div><div class="fog" style="left: -745px; top: -759px; width: 818px; height: 818px; z-index: 14817;"></div><div class="fog" style="left: 1923px; top: 4480px; width: 818px; height: 818px; z-index: 14817;"></div><canvas width="500" height="334" style="left: -1423px; top: 2067px; width: 857px; height: 573px; z-index: 24708;"></canvas><div class="fog" style="left: 645px; top: -58px; width: 383px; height: 383px; z-index: 14608;"></div><div class="fog" style="left: -51px; top: -1106px; width: 383px; height: 383px; z-index: 14608;"></div><div class="fog" style="left: -1597px; top: 1990px; width: 383px; height: 383px; z-index: 14608;"></div><canvas width="375" height="500" style="left: 533px; top: 106px; width: 375px; height: 500px; z-index: 24500; cursor: default;" class=""></canvas><div class="fog" style="left: 1828px; top: 725px; width: 250px; height: 250px; z-index: 14400;"></div><div class="fog" style="left: -878px; top: 1116px; width: 250px; height: 250px; z-index: 14400;"></div><div class="fog" style="left: -1286px; top: -455px; width: 250px; height: 250px; z-index: 14400;"></div><canvas width="500" height="334" style="left: 1249px; top: 1064px; width: 353px; height: 236px; z-index: 24292;"></canvas><div class="fog" style="left: 1362px; top: 1143px; width: 186px; height: 186px; z-index: 14192;"></div><div class="fog" style="left: 493px; top: 1190px; width: 186px; height: 186px; z-index: 14192;"></div><div class="fog" style="left: 619px; top: 60px; width: 186px; height: 186px; z-index: 14192;"></div><canvas width="500" height="334" style="left: -507px; top: -83px; width: 273px; height: 182px; z-index: 24083;"></canvas><div class="fog" style="left: 937px; top: 727px; width: 148px; height: 148px; z-index: 13983;"></div><div class="fog" style="left: 1042px; top: 552px; width: 148px; height: 148px; z-index: 13983;"></div><div class="fog" style="left: -71px; top: -760px; width: 148px; height: 148px; z-index: 13983;"></div><canvas width="333" height="500" style="left: 202px; top: 47px; width: 148px; height: 222px; z-index: 23875;"></canvas><div class="fog" style="left: 1227px; top: -121px; width: 122px; height: 122px; z-index: 13775;"></div><div class="fog" style="left: 655px; top: 222px; width: 122px; height: 122px; z-index: 13775;"></div><div class="fog" style="left: 936px; top: 456px; width: 122px; height: 122px; z-index: 13775;"></div><canvas width="500" height="375" style="left: 626px; top: 700px; width: 187px; height: 141px; z-index: 23667;"></canvas><div class="fog" style="left: 258px; top: 893px; width: 105px; height: 105px; z-index: 13567;"></div><div class="fog" style="left: 104px; top: 302px; width: 105px; height: 105px; z-index: 13567;"></div><div class="fog" style="left: -172px; top: 527px; width: 105px; height: 105px; z-index: 13567;"></div><canvas width="500" height="333" style="left: 963px; top: 779px; width: 162px; height: 108px; z-index: 23458;"></canvas><div class="fog" style="left: 236px; top: -155px; width: 91px; height: 91px; z-index: 13358;"></div><div class="fog" style="left: 592px; top: -235px; width: 91px; height: 91px; z-index: 13358;"></div><div class="fog" style="left: 86px; top: -193px; width: 91px; height: 91px; z-index: 13358;"></div><canvas width="333" height="500" style="left: 101px; top: 112px; width: 95px; height: 143px; z-index: 23250;"></canvas><div class="fog" style="left: 188px; top: 83px; width: 81px; height: 81px; z-index: 13150;"></div><div class="fog" style="left: 128px; top: 771px; width: 81px; height: 81px; z-index: 13150;"></div><div class="fog" style="left: 379px; top: 636px; width: 81px; height: 81px; z-index: 13150;"></div><canvas width="500" height="394" style="left: 401px; top: 225px; width: 128px; height: 101px; z-index: 23042; cursor: pointer;" class=""></canvas><div class="fog" style="left: 244px; top: 739px; width: 73px; height: 73px; z-index: 12942;"></div><div class="fog" style="left: 224px; top: 512px; width: 73px; height: 73px; z-index: 12942;"></div><div class="fog" style="left: 617px; top: 263px; width: 73px; height: 73px; z-index: 12942;"></div><canvas width="500" height="377" style="left: 662px; top: 685px; width: 115px; height: 87px; z-index: 22833;"></canvas><div class="fog" style="left: 679px; top: 448px; width: 66px; height: 66px; z-index: 12733;"></div><div class="fog" style="left: 744px; top: 369px; width: 66px; height: 66px; z-index: 12733;"></div><div class="fog" style="left: 623px; top: 123px; width: 66px; height: 66px; z-index: 12733;"></div><canvas width="500" height="333" style="left: 878px; top: 406px; width: 105px; height: 70px; z-index: 22625;"></canvas><div class="fog" style="left: 909px; top: 24px; width: 61px; height: 61px; z-index: 12525;"></div><div class="fog" style="left: 754px; top: 656px; width: 61px; height: 61px; z-index: 12525;"></div><div class="fog" style="left: 571px; top: 197px; width: 61px; height: 61px; z-index: 12525;"></div><canvas width="263" height="500" style="left: 307px; top: 369px; width: 51px; height: 97px; z-index: 22417;"></canvas><div class="fog" style="left: 350px; top: 28px; width: 56px; height: 56px; z-index: 12317;"></div><div class="fog" style="left: 357px; top: 292px; width: 56px; height: 56px; z-index: 12317;"></div><div class="fog" style="left: 648px; top: 180px; width: 56px; height: 56px; z-index: 12317;"></div><canvas width="500" height="375" style="left: 496px; top: 73px; width: 90px; height: 67px; z-index: 22208;"></canvas><div class="fog" style="left: 940px; top: 162px; width: 52px; height: 52px; z-index: 12108;"></div><div class="fog" style="left: 431px; top: 361px; width: 52px; height: 52px; z-index: 12108;"></div><div class="fog" style="left: 874px; top: 280px; width: 52px; height: 52px; z-index: 12108;"></div><canvas width="500" height="375" style="left: 678px; top: 349px; width: 83px; height: 62px; z-index: 22000;"></canvas><div class="fog" style="left: 585px; top: 489px; width: 48px; height: 48px; z-index: 11900;"></div><div class="fog" style="left: 332px; top: 563px; width: 48px; height: 48px; z-index: 11900;"></div><div class="fog" style="left: 328px; top: 516px; width: 48px; height: 48px; z-index: 11900;"></div><canvas width="429" height="500" style="left: 842px; top: 320px; width: 67px; height: 78px; z-index: 21792;"></canvas><div class="fog" style="left: 651px; top: 118px; width: 45px; height: 45px; z-index: 11692;"></div><div class="fog" style="left: 492px; top: 145px; width: 45px; height: 45px; z-index: 11692;"></div><div class="fog" style="left: 375px; top: 220px; width: 45px; height: 45px; z-index: 11692;"></div><canvas width="375" height="500" style="left: 400px; top: 199px; width: 55px; height: 73px; z-index: 21583; cursor: pointer;" class=""></canvas><div class="fog" style="left: 672px; top: 146px; width: 43px; height: 43px; z-index: 11483;"></div><div class="fog" style="left: 852px; top: 290px; width: 43px; height: 43px; z-index: 11483;"></div><div class="fog" style="left: 802px; top: 242px; width: 43px; height: 43px; z-index: 11483;"></div></div>
+<script type="text/javascript">
+
+/* ==== start script ==== */
+
+setTimeout(function() {
+
+	m3D.init(
+
+		[ 
+
+			{ src: '/02.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/03.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/04.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/05.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/07.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/08.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/09.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/10.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/11.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/12.jpg', title: '明月大美女', color: '#fff' },
+			{ src: '/13.jpg', title: '明月大美女', color: '#fff' },
+			{ src: '/14.jpg', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+			{ src: '/06.jpg', url: 'https://feblog.cn', title: '明月大美女', color: '#fff' },
+
+		]
+
+	);
+
+}, 500);
+
+</script>
+
+
+</body></html>
